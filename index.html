@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — Prostarm</title>
+<style>
+:root{
+  --navy:#0b3f7a; --blue:#1e5fa8; --blue-lt:#2f80d2;
+  --teal:#00b3a4; --ink:#123047; --muted:#5d7c93; --line:#c9dae6;
+  --red:#c0392b; --red-lt:#fdeceb;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:0;font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px;color:var(--ink);background:linear-gradient(160deg,#dfeaf2 0%,#bcd6e6 100%);min-height:100vh;display:grid;place-items:center}
+input,select{font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:0;border-color:var(--teal)}
+.btn-main{background:linear-gradient(180deg,#4c93d6,#1e5fa8);color:#fff;border:1px solid #1e5fa8;border-radius:4px;font-size:12.5px;padding:8px 20px;cursor:pointer;font-weight:700}
+.btn-main:hover{filter:brightness(1.1)}
+.lcard{width:100%;max-width:380px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 40px rgba(11,63,122,.22);overflow:hidden}
+.lhead{padding:16px 20px;background:linear-gradient(180deg,#f7fbfd,#e3eef5);border-bottom:1px solid var(--line);text-align:center;font-size:18px;font-weight:800;color:var(--navy)}
+.lhead img{width:172px;height:auto;display:block;margin:0 auto}
+.lbar{background:linear-gradient(180deg,var(--blue-lt),var(--navy));color:#fff;padding:9px 14px;font-size:13.5px;font-weight:700;letter-spacing:.3px;text-align:center}
+.lbody{padding:18px 20px 20px}
+.lbody .f{margin-bottom:11px}
+label{font-size:10px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+#loginBtn{width:100%;padding:9px;margin-top:4px}
+.lnote{margin-top:14px;padding-top:12px;border-top:1px solid #e8f0f5;font-size:10.5px;color:var(--muted);font-weight:600;line-height:1.5}
+.msg{border-radius:5px;padding:10px 12px;font-size:12px;margin-bottom:10px;font-weight:600;display:none}
+.msg.no{background:var(--red-lt);border:1px solid #eab9b3;color:#96271b}
+.msg.ok{background:#eef7fb;border:1px solid var(--line);color:var(--navy)}
+</style>
+</head>
+<body>
+
+<div class="lcard">
+  <div class="lhead"><img src="ProstarM.png" alt="Prostarm - Power Redefined"></div>
+  <div class="lbar">App Access Login</div>
+  <div class="lbody">
+    <div class="msg no" id="loginErr"></div>
+    <div class="f">
+      <label>Username</label>
+      <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username">
+    </div>
+    <div class="f">
+      <label>Password</label>
+      <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+    </div>
+    <button class="btn-main" id="loginBtn">Sign in</button>
+    <div class="lnote">ProstarM Power Redefined</div>
+  </div>
+</div>
+
+<script>
+async function attemptLogin() {
+  const user = document.getElementById("loginUser").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  const err = document.getElementById("loginErr");
+  
+  if (!user || !pass) {
+    err.className = "msg no"; err.style.display = "block";
+    err.textContent = "Please enter both username and password.";
+    return;
+  }
+
+  try {
+    err.className = "msg ok"; err.style.display = "block";
+    err.textContent = "Authenticating... Please wait.";
+
+    // Call your Power Automate Login Flow
+    const response = await fetch('https://8549b42c711be8948675eefb5cf215.dd.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/13/workflows/e62fbf7ed7ae45228f01df4436732998/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=nGtsPj0jA0KRdZhYwPusJCRzc6ihIQ5jyjmBJAnzjDQ', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass })
+    });
+    
+    const result = await response.json();
+    
+    if (result.isValid) {
+      // Force string and trim invisible Excel spaces safely
+      const rawAccess = result.accessLevel || result.AccessLevel || result['Access Level'] || "Both";
+      const accessLevel = String(rawAccess).trim();
+      const accessLower = accessLevel.toLowerCase();
+      
+      sessionStorage.setItem('activeUser', JSON.stringify({
+        username: String(result.empCode).trim().toUpperCase(),
+        access: accessLevel
+      }));
+      
+      // Route the user case-insensitively
+      if (accessLower === 'travel expense') {
+        window.location.href = 'Travel_Expense_Approval.html';
+      } else {
+        // Defaults to Petty Cash for "petty cash" or "both"
+        window.location.href = 'approval.html'; 
+      }
+    } else {
+      err.className = "msg no"; err.style.display = "block";
+      err.textContent = "Invalid username or password. Please try again.";
+    }
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    err.className = "msg no"; err.style.display = "block";
+    err.textContent = "Error connecting to the server. Please try again later.";
+  }
+}
+
+document.getElementById("loginBtn").addEventListener("click", attemptLogin);
+
+document.getElementById("loginPass").addEventListener("keypress", function(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    attemptLogin();
+  }
+});
+</script>
+</body>
+</html>
