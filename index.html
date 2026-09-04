@@ -76,22 +76,23 @@ async function attemptLogin() {
     const result = await response.json();
     
     if (result.isValid) {
-      // Force string and trim invisible Excel spaces safely
-      const rawAccess = result.accessLevel || result.AccessLevel || result['Access Level'] || "Both";
-      const accessLevel = String(rawAccess).trim();
-      const accessLower = accessLevel.toLowerCase();
+      // 1. Catch the exact AccessLevel column from your Excel sheet
+      const rawAccess = result.AccessLevel || result.accessLevel || result['Access Level'] || "";
+      const accessLower = String(rawAccess).trim().toLowerCase();
       
-      sessionStorage.setItem('activeUser', JSON.stringify({
-        username: String(result.empCode).trim().toUpperCase(),
-        access: accessLevel
-      }));
+      // 2. Catch the exact Username column (fallback to what the user typed)
+      const validUser = result.Username || result.username || result.empCode || user;
       
-      // Route the user case-insensitively
-      if (accessLower === 'travel expense') {
+      // 3. Use .includes() to safely ignore accidental spaces in Excel
+      if (accessLower.includes('travel expense')) {
+        sessionStorage.setItem('activeUser', JSON.stringify({
+          username: String(validUser).trim().toUpperCase(),
+          access: String(rawAccess).trim()
+        }));
         window.location.href = 'Travel_Expense_Approval.html';
       } else {
-        // Defaults to Petty Cash for "petty cash" or "both"
-        window.location.href = 'approval.html'; 
+        err.className = "msg no"; err.style.display = "block";
+        err.textContent = "You do not have permission to access Travel Expenses.";
       }
     } else {
       err.className = "msg no"; err.style.display = "block";

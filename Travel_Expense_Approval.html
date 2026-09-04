@@ -258,7 +258,6 @@ input.ref{background:var(--tile);color:var(--navy);font-weight:800;font-variant-
     <div class="userbox">
       <b id="uName">—</b><span id="uSub">—</span>
       <span class="bell" id="bell" title="Pending with you"></span>
-      <button type="button" onclick="location.href='approval.html'">Petty Cash</button>
       <button id="logoutBtn">Sign out</button>
     </div>
   </div>
@@ -328,7 +327,7 @@ input.ref{background:var(--tile);color:var(--navy);font-weight:800;font-variant-
         <div class="card">
           <h3>C · Expense Line Items<em id="lineDateNote">All lines share the claim date — each carries its own ticket, customer and purpose</em></h3>
           <div class="body">
-            <div class="cond">Bike claims are calculated by the system. Up to 200 KM in a day pays ₹4/KM. Cross 200 KM in the same day and the whole day's distance pays ₹2.5/KM. Every other head is claimed at actual bill value.</div>
+            <div class="cond">Bike claims are calculated by the system. Up to 200 KM in a day pays ₹4/KM. Cross 200 KM in the same day and the whole day's distance pays ₹3/KM. Every other head is claimed at actual bill value. A bill is not needed on Food lines up to ₹400; above that one is required. Ticket / Case No is required on Travel and Hotel lines only.</div>
             <div id="items"></div>
             <button type="button" class="btn btn-main" id="addItem">+ Add Expense Line</button>
             <div class="tot">
@@ -588,7 +587,21 @@ const HEADS = {
 };
 const SLAB_MODES=["Bike","Own Vehicle"];
 const isSlabMode=m=>SLAB_MODES.indexOf(m)>-1;
-const BIKE_SLAB = {limit:200, low:4, high:2.5};
+const BIKE_SLAB = {limit:200, low:4, high:3};
+/* A bill is not required on small Food claims. Above this value one is. */
+const FOOD_BILL_FREE = 400;
+/* Customer segments offered on every line. */
+const SEGMENTS = ["ATM","NON-ATM","Dealer & Channel Sales","Branch"];
+/* Heads tied to a customer site. Only these must quote a service ticket;
+   Food and Misc are incidental spend and may leave it blank. */
+const SITE_HEADS = ["Travel","Hotel"];
+const needsTicket = it => SITE_HEADS.indexOf(it.cat)>-1;
+
+function needsBill(it){
+  if(isBikeLine(it)) return false;
+  if(it.cat==="Food" && (Number(it.amt)||0) <= FOOD_BILL_FREE) return false;
+  return true;
+}
 const TAT = {rec:"24 hrs", app:"48 hrs", pay:"7 working days"};
 const MAXFILE = 900*1024;
 const ROAD_FACTOR = 1.25;
@@ -1027,11 +1040,12 @@ function renderItems(){
       '<span class="sp">'+money(it.amt)+'</span>'+
       '<button type="button" class="btn btn-no" onclick="removeItem(\''+it.id+'\')">Remove</button></div>'+
       '<div class="item-b"><div class="frow4">'+
-        fld("Ticket / Case No <span class=\"req\">*</span>","<input value=\""+esc(it.ticket||"")+"\" placeholder=\"PROSTARM26XXXXXXX\" onchange=\"upd('"+it.id+"','ticket',this.value)\">",1)+
+        fld("Ticket / Case No "+(needsTicket(it)?"<span class=\"req\">*</span>":"<span class=\"auto\">optional for "+esc(it.cat)+"</span>"),
+          "<input value=\""+esc(it.ticket||"")+"\" placeholder=\""+(needsTicket(it)?"PROSTARM26XXXXXXX":"not required")+"\" onchange=\"upd('"+it.id+"','ticket',this.value)\">",1)+
         fld("UID <span class=\"auto\">optional</span>","<input value=\""+esc(it.uid||"")+"\" placeholder=\"Site UID / ATM ID\" onchange=\"upd('"+it.id+"','uid',this.value)\">",1)+
         fld("Customer Name <span class=\"req\">*</span>","<input list=\"custList\" value=\""+esc(it.custName||"")+"\" placeholder=\"e.g. Hitachi Payment Services Pvt Ltd\" onchange=\"upd('"+it.id+"','custName',this.value)\">",1)+
         fld("Customer Segment <span class=\"req\">*</span>","<select onchange=\"upd('"+it.id+"','segment',this.value)\">"+
-          ["ATM","NON-ATM","Dealer & Channel Sales"].map(x=>'<option'+(x===it.segment?" selected":"")+'>'+esc(x)+'</option>').join("")+"</select>",1)+
+          SEGMENTS.map(x=>'<option'+(x===it.segment?" selected":"")+'>'+esc(x)+'</option>').join("")+"</select>",1)+
       '</div>'+
       '<div class="frow4" style="margin-top:8px">'+
         fld("Purpose Of Travel <span class=\"req\">*</span>","<input value=\""+esc(it.purpose||"")+"\" placeholder=\"e.g. UPS breakdown attended at site\" onchange=\"upd('"+it.id+"','purpose',this.value)\">",1)+
@@ -1060,7 +1074,8 @@ function renderItems(){
       '</div></div>':'')+
       '<div class="frow4" style="margin-top:8px">'+
         fld("Description / Remarks","<input value=\""+esc(it.desc)+"\" placeholder=\"e.g. Hotel bill, 2 nights, Hazaribagh\" onchange=\"upd('"+it.id+"','desc',this.value)\">",2)+
-        fld("Supporting Bill / Receipt","<div class=\"drop\" onclick=\"document.getElementById('file-"+it.id+"').click()\"><b>Attach bill</b>image or PDF, up to 900 KB</div><input type=\"file\" id=\"file-"+it.id+"\" class=\"hide\" accept=\"image/*,.pdf\" multiple onchange=\"pickFiles('"+it.id+"',this)\">",2)+
+        fld("Supporting Bill / Receipt "+(needsBill(it)?"<span class=\"req\">*</span>":"<span class=\"auto\">not required</span>"),
+          "<div class=\"drop\" onclick=\"document.getElementById('file-"+it.id+"').click()\"><b>Attach bill</b>image or PDF, up to 900 KB</div><input type=\"file\" id=\"file-"+it.id+"\" class=\"hide\" accept=\"image/*,.pdf\" multiple onchange=\"pickFiles('"+it.id+"',this)\">",2)+
       '</div>'+
       (it.att.length?'<div class="att">'+it.att.map((a,ai)=>'<span class="chip"><a onclick="openAtt(\''+it.id+'\','+ai+')">'+esc(a.name)+'</a><span onclick="dropAtt(\''+it.id+'\','+ai+')">×</span></span>').join("")+'</div>':'')+
       '</div></div>';
@@ -1086,11 +1101,18 @@ function queueRender(){ if(RQ) clearTimeout(RQ); RQ=setTimeout(()=>{RQ=null;rend
 function upd(id,k,v){
   const it=ITEMS.find(x=>x.id===id); if(!it) return;
   if(k==="amt"||k==="km") v=v===""?"":Math.max(0,Number(v)||0);
+  
   const wasBike=isBikeLine(it);
+  const wasBill=needsBill(it); // <-- ADD THIS
+
   it[k]=v;
   if(wasBike!==isBikeLine(it)){ it.amt=""; it.km=""; it.rate=0; }
   if(k==="mode"||k==="km"||k==="jFromPin"||k==="jToPin"){ queueRender(); return; }
   if(k==="amt"){
+    // <-- ADD THIS CHECK -->
+    /* Crossing the Food threshold flips whether a bill is required, so the line must redraw. */
+    if(it.cat==="Food" && wasBill!==needsBill(it)){ queueRender(); return; }
+    
     const h=document.querySelector('.item[data-id="'+id+'"] .item-h .sp');
     if(h) h.textContent=money(it.amt);
   }
@@ -1188,14 +1210,15 @@ function validate(){
   if(!ITEMS.length) bad.push("at least one expense line");
   ITEMS.forEach((it,i)=>{
     const n="line "+(i+1);
-    if(!(it.ticket||"").trim()) bad.push("the ticket / case number on "+n);
+    if(needsTicket(it)&&!(it.ticket||"").trim()) bad.push("the ticket / case number on "+n);
     if(!(it.custName||"").trim()) bad.push("the customer name on "+n);
     if(!(it.segment||"").trim()) bad.push("the customer segment on "+n);
     if(!(it.purpose||"").trim()) bad.push("the purpose of travel on "+n);
     if(it.cat==="Travel"&&!(Number(it.km)>0)) bad.push("the KM travelled on "+n);
     if(!isBikeLine(it)&&!(Number(it.amt)>0)) bad.push("a claimed amount on "+n);
     if(it.cat==="Travel"&&(!it.jFrom.trim()||!it.jTo.trim())) bad.push("journey from and to on "+n);
-    if(!it.att.length&&!isBikeLine(it)) bad.push("a supporting bill on "+n);
+    if(!it.att.length&&needsBill(it)) bad.push("a supporting bill on "+n+
+  (it.cat==="Food"?" — Food over ₹"+FOOD_BILL_FREE+" needs one":""));
   });
   return bad;
 }
@@ -2036,7 +2059,8 @@ async function parseBatch(grid,fileName){
       else r.err.push("Journey Date is not a valid date — format the cell as a date");
     }
     if(r.date&&r.date>today) r.err.push("Journey Date cannot be a future date");
-    if(!r.ticket) r.err.push("Ticket ID / Case ID is blank");
+    if(!r.ticket && SITE_HEADS.indexOf(r.expType)>-1)
+      r.err.push("Ticket ID / Case ID is required on "+r.expType+" lines");
     if(!r.custName) r.err.push("Customer Name is blank");
     if(!r.segment) r.err.push("Customer Segment is blank");
     if(!r.purpose) r.err.push("Purpose Of Travel is blank");
@@ -2070,8 +2094,8 @@ async function parseBatch(grid,fileName){
     if(!r.dept) r.err.push("Department is blank");
     if(!r.project) r.err.push("Project / Service Type is blank");
     if(r.currency&&r.currency!=="INR") r.err.push("Claim Currency must be INR");
-    if(r.eng&&r.date&&r.ticket){
-      const k=[r.eng,r.date,r.ticket,r.expType,r.mode].join("|");
+    if(r.eng&&r.date){
+      const k=[r.eng,r.date,r.ticket||"-",r.expType,r.mode].join("|");
       if(seen[k]) r.warn.push("Repeats row "+seen[k]+" — same engineer, date, ticket, type and mode");
       else seen[k]=r.xl;
     }
@@ -2355,20 +2379,17 @@ async function initializeApp() {
     return;
   }
 
-  const rawAccess = SESSION_USER.access || "Both";
+  const rawAccess = SESSION_USER.access || "";
   const access = String(rawAccess).trim().toLowerCase();
   
-  if (access !== "travel expense" && access !== "both") {
+  // Must match the same substring check used at login (index.html),
+  // otherwise a valid AccessLevel like "Travel Expenses" or
+  // "Travel Expense, HO Admin" would log in fine but get bounced here.
+  if (!access.includes('travel expense')) {
     alert("You do not have access to Travel Expenses.");
-    window.location.href = 'approval.html';
+    window.location.href = 'index.html';
     return;
   }
-
-  if (access !== "both") {
-    const switchBtn = document.querySelector('.userbox button[onclick*="approval"]');
-    if (switchBtn) switchBtn.style.display = 'none';
-  }
-
   const code = String(SESSION_USER.username).trim().toUpperCase();
 
   try {
