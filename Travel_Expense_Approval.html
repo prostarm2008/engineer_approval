@@ -1261,7 +1261,7 @@ function showClaimAtt(cid,li,ai){
 }
 
 function toast(t,ok){ const el=$("toast"); el.className="msg "+(ok?"ok":"no")+" on"; el.textContent=t; window.scrollTo(0,0);
-  setTimeout(()=>{el.className="msg";},6000); }
+  setTimeout(()=>{el.className="msg";},20000); }
 function validate(){
   const bad=[];
   const mob=$("mobile").value.trim();
@@ -2371,7 +2371,7 @@ function xlsxDownload(fileName, sheets){
   const a=document.createElement("a");
   a.href=url; a.download=file; a.style.display="none";
   document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },1500);
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },5000);
 }
 
 /* ---- how each journey mode is counted on the summary ---- */
@@ -2687,7 +2687,7 @@ const TYPE_DEFAULT_MODE={"Hotel":"Hotel","Food":"Restaurants","Misc":"Others"};
 let BATCH=null;
 
 function bToast(t,ok){ const e=$("bToast"); e.className="msg "+(ok?"ok":"no")+" on"; e.textContent=t;
-  setTimeout(()=>{e.className="msg";},7000); }
+  setTimeout(()=>{e.className="msg";},20000); }
 
 $("bDrop").addEventListener("click",()=>$("bFile").click());
 ["dragover","dragenter"].forEach(ev=>$("bDrop").addEventListener(ev,e=>{
