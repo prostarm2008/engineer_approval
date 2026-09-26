@@ -193,6 +193,38 @@ input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,10
 </div>
 
 <script>
+/* ---------- IndexedDB session store ----------
+   Replaces sessionStorage: the signed-in user (username + access level) is
+   kept in an IndexedDB database shared with Travel_Expense_Approval.html,
+   instead of the browser's session storage. No sessionStorage/localStorage
+   read is needed anywhere in this flow. */
+const EC_DB_NAME = "prostarm_ec";
+const EC_DB_VERSION = 1;
+const EC_STORE_SESSION = "session";
+
+function ecIdbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(EC_DB_NAME, EC_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(EC_STORE_SESSION)) {
+        db.createObjectStore(EC_STORE_SESSION);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function ecSessionSet(key, value) {
+  const db = await ecIdbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EC_STORE_SESSION, "readwrite");
+    tx.objectStore(EC_STORE_SESSION).put(value, key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 async function attemptLogin() {
   const user = document.getElementById("loginUser").value.trim();
   const pass = document.getElementById("loginPass").value;
@@ -243,10 +275,10 @@ async function attemptLogin() {
       
       // 3. Use .includes() to safely ignore accidental spaces in Excel
       if (accessLower.includes('travel expense')) {
-        sessionStorage.setItem('activeUser', JSON.stringify({
+        await ecSessionSet('activeUser', {
           username: String(validUser).trim().toUpperCase(),
           access: String(rawAccess).trim()
-        }));
+        });
         window.location.href = 'Travel_Expense_Approval.html';
       } else {
         err.className = "msg no"; err.style.display = "block";
