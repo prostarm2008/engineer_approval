@@ -525,40 +525,69 @@ const FLOW_URL_DELETE_CLAIM  = "https://8549b42c711be8948675eefb5cf215.dd.enviro
 
 
 /* ================= CLOUD CRUD OPERATIONS ================= */
+/* Every call to a Power Automate flow goes through this so a failure is never
+   silent: a non-2xx status, a timed-out flow, or a flow that comes back with an
+   HTML error page instead of JSON all turn into one clear Error with a real
+   message, instead of an unhandled "Unexpected token <" that the caller's
+   try/catch can't explain to the person using the app. */
+async function postJSON(url, body, timeoutMs = 60000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res, text;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    text = await res.text();
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("The server took too long to respond (over " + (timeoutMs/1000) + "s). Please try again.");
+    throw new Error("Could not reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) throw new Error("Server returned " + res.status + " " + res.statusText + " — " + text.slice(0, 300));
+  try { return text ? JSON.parse(text) : {}; }
+  catch (e) { throw new Error("Server response was not valid JSON — " + text.slice(0, 300)); }
+}
+
 async function fetchClaimsFromCloud(empCode) {
-  const res = await fetch(FLOW_URL_LIST_CLAIMS, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ empCode: empCode })
-  });
-  return await res.json();
+  /* The flow's trigger schema requires a "role" property (this is the exact
+     error you hit — "Required properties are missing from object: role").
+     We send the same role bucket the rest of the app already computes for
+     this person (Reporting Manager / Regional Manager / HO Admin) so the
+     flow has something to route/filter on. If your flow expects a different
+     value or shape for "role", change the myRole() function just below. */
+  return postJSON(FLOW_URL_LIST_CLAIMS, { empCode: empCode, role: myRole() });
+}
+/* This must answer "does this person manage anyone, or are they an individual
+   contributor?" — NOT the approval-stage bucket (EMP[x].g), which defaults to
+   "Reporting Manager" for everyone who isn't a Regional Manager or HO Admin,
+   including plain engineers. Sending that bucket as "role" meant an engineer's
+   role was never the literal string "engineer", so the flow's
+   role == "engineer" condition was always false for them and they fell into
+   the "else" branch meant for managers, getting every claim in the sheet
+   instead of just their own. */
+function myRole(){
+  if(!EMP[ME]) return "";
+  if(isHO(ME)) return "HO Admin";
+  if(isRegional(ME)) return "Regional Manager";
+  if(isReporting(ME)) return "Reporting Manager";
+  return "Engineer";
 }
 
 async function submitClaimToCloud(claimPayload) {
-  const res = await fetch(FLOW_URL_ADD_CLAIM, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(claimPayload)
-  });
-  return await res.json();
+  return postJSON(FLOW_URL_ADD_CLAIM, claimPayload);
 }
 
 async function updateClaimInCloud(updatePayload) {
-  const res = await fetch(FLOW_URL_UPDATE_CLAIM, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updatePayload)
-  });
-  return await res.json();
+  return postJSON(FLOW_URL_UPDATE_CLAIM, updatePayload);
 }
 
 async function deleteClaimFromCloud(claimId) {
-  const res = await fetch(FLOW_URL_DELETE_CLAIM, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ claimId: claimId })
-  });
-  return await res.json();
+  return postJSON(FLOW_URL_DELETE_CLAIM, { claimId: claimId });
 }
 
 /* ================= HELPERS ================= */
@@ -755,7 +784,22 @@ async function loadAll() {
       };
     });
     return MEM;
-  } catch (err) { return MEM; }
+  } catch (err) {
+    /* Before this, a failed "list claims" call was swallowed here and every view
+       (My Claims / To Check / To Approve / HO Admin) just looked permanently empty
+       with nothing in the UI to say why. Now it's logged and surfaced as a toast,
+       and the app still falls back to whatever was last loaded instead of blanking
+       the screen. */
+    console.error("View flow (list claims) failed:", err);
+    const el = $("toast");
+    if (el) {
+      el.className = "msg no on";
+      el.textContent = "Could not load claims from the server (" + err.message + "). Showing the last loaded data — press Refresh to try again.";
+      clearTimeout(el._hideTimer);
+      el._hideTimer = setTimeout(() => { el.className = "msg"; }, 20000);
+    }
+    return MEM;
+  }
 }
 
 async function saveAll(list){
