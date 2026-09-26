@@ -525,12 +525,26 @@ const FLOW_URL_DELETE_CLAIM  = "https://8549b42c711be8948675eefb5cf215.dd.enviro
 
 
 /* ================= CLOUD CRUD OPERATIONS ================= */
-async function fetchClaimsFromCloud(empCode) {
+async function fetchClaimsFromCloud(empCode, role) {
   const res = await fetch(FLOW_URL_LIST_CLAIMS, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ empCode: empCode })
+    body: JSON.stringify({
+      empCode: empCode,
+      role: role
+    })
   });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      "List Claims Flow failed: HTTP " +
+      res.status +
+      " - " +
+      text
+    );
+  }
+
   return await res.json();
 }
 
