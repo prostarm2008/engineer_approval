@@ -728,13 +728,17 @@ function dkey(v){
 
 async function loadAll() {
   try {
-    const role =
-      ME && EMP[ME]
-        ? String(EMP[ME].g || EMP[ME].d || "")
-        : "";
-
-    const raw = await fetchClaimsFromCloud(ME || "", role);
-    const rows = Array.isArray(raw) ? raw : (raw.value || []);
+const role = (
+!isReporting(ME) &&
+!isRegional(ME) &&
+!isHO(ME)
+) ? "engineer" : "manager";
+ 
+const raw = await fetchClaimsFromCloud(ME || "", role);
+ 
+const rows = Array.isArray(raw)
+? raw
+: (raw.value || []);
     
     MEM = rows.map(r => {
       let extra = {};
@@ -774,7 +778,9 @@ async function loadAll() {
       };
     });
     return MEM;
-  } catch (err) { return MEM; }
+  } catch (err) {
+	console.error("loadAll failed:", err);
+	return MEM; }
 }
 
 async function saveAll(list){
