@@ -728,7 +728,12 @@ function dkey(v){
 
 async function loadAll() {
   try {
-    const raw = await fetchClaimsFromCloud(ME || "");
+    const role =
+      ME && EMP[ME]
+        ? String(EMP[ME].g || EMP[ME].d || "")
+        : "";
+
+    const raw = await fetchClaimsFromCloud(ME || "", role);
     const rows = Array.isArray(raw) ? raw : (raw.value || []);
     
     MEM = rows.map(r => {
